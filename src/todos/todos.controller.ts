@@ -10,6 +10,12 @@ export class TodosController {
         return todos;
     }
 
+    @Get('/:id')
+    async getTodoById(@Param('id') id: string) {
+        const todo = await this.todosService.getTodoById(id);
+        return todo;
+    }
+
     @Post()
     async addTodo(@Body('title') title: string, @Body('completed') completed: boolean) {
         const createdTodo = await this.todosService.insertTodo(title, completed);

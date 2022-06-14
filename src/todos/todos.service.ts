@@ -1,9 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { WebSocketService } from 'src/websocket/websocket.service';
 import { Todo } from './todo.model';
 @Injectable()
 export class TodosService {
+    @Inject()
+    wsService: WebSocketService;
 
     constructor(@InjectModel('todos') private readonly todoModel: Model<Todo>) { }
 
@@ -17,9 +20,20 @@ export class TodosService {
             }))
     }
 
+    async getTodoById(id: string) {
+        const result = await this.findTodoById(id);
+        return {
+            id: result._id,
+            title: result.title,
+            completed: result.completed
+        };
+    }
+
     async insertTodo(title: string, completed: boolean) {
         const newTodo = new this.todoModel({ title, completed });
         const result = await newTodo.save();
+        // notification INSERT
+        this.wsService.send({ type: 'insert', id: result._id });
         return {
             id: result._id,
             title: result.title,
@@ -34,10 +48,12 @@ export class TodosService {
         }
         if (completed !== undefined) {
             toUpdateTodo.completed = completed;
-        } 
+        }
         const result = await toUpdateTodo.save();
+        // notification UPDATE
+        this.wsService.send({ type: 'update', id: result._id });
         console.log(result);
-        return { id : result._id };
+        return { id: result._id };
     }
 
     private async findTodoById(id: string): Promise<Todo> {
@@ -52,13 +68,13 @@ export class TodosService {
     }
 
     async deleteTodo(id: string) {
-        let result;
-        try {
-            result = this.todoModel.deleteOne({ _id: id })
-        }
-        catch (err) {
+        const result = await this.todoModel.deleteOne({ _id: id }).exec();
+
+        if (result.deletedCount === 0) {
             throw new NotFoundException(`delete : Could not find todo ${id}`);
         }
+        // notification UPDATE
+        this.wsService.send({ type: 'delete', id });
         return result;
     }
 }
